@@ -324,6 +324,12 @@ class Netconf:
         'show interfaces terse | display xml rpc'
         https://www.juniper.net/documentation/us/en/software/junos-pyez/junos-pyez-developer/topics/task/junos-pyez-rpcs-executing.html
 
+        Example:
+        rpc_commands(
+            'get-interface-information',
+            interface_name='ge-0/0/0'
+        )
+
         Parameters
         ----------
         rpc_cmd : str
@@ -354,9 +360,11 @@ class Netconf:
             output = xmltodict.parse(output)
 
         except Exception as err:
-            print('There was an error connecting to the Junos shell')
-            print(err)
-            output = err
+            print('There was an error with the RPC command')
+            output = {
+                'status': 'error',
+                'error': err
+            }
 
         return output
 
