@@ -4,12 +4,13 @@ Hardware information for Juniper devices
 NOTE: This only returns dummy data at the moment
 
 Modules:
-    3rd Party: None
-    Internal: None
+    3rd Party: traceback
+    Internal: netconf
 
 Classes:
 
-    None
+    Hardware
+        Connect to a Junos device and collect hardware information
 
 Functions
 
@@ -36,171 +37,293 @@ Author:
     Luke Robertson - May 2023
 """
 
+import traceback as tb
 
-def cpu():
+import netconf
+
+
+class Hardware:
     """
-    Collect CPU usage information
-    Used, idle, 1 min average, 5 min average, 15 min average
+    Connect to a Junos device and collect hardware information
 
-    Parameters
+    Supports being instantiated with the 'with' statement
+
+    Attributes
     ----------
-    None
+    host : str
+        IP address or FQDN of the device to connect to
+    user : str
+        Username to connect with
+    password : str
+        Password to connect with
 
-    Raises
-    ------
-    None
-
-    Returns
+    Methods
     -------
-    cpu : dict
-        Dictionary containing CPU usage information
+    __init__(host, user, password)
+        Class constructor
+    __enter__()
+        Called when the 'with' statement is used
+    __exit__(exc_type, exc_value, traceback)
+        Called when the 'with' statement is finished
+    cpu()
+        Collect CPU usage information
+    memory()
+        Collect memory usage information
+    disk()
+        Collect disk usage information
+    temperature()
+        Collect temperature information
+    fans()
+        Collect fan information
     """
 
-    cpu = {
-        "cpu": {
-            "used": 10,
-            "idle": 90,
-            "1_min": 5,
-            "5_min": 1,
-            "1_5min": 1
-        }
-    }
+    def __init__(self, host, user, password):
+        """
+        Class constructor
 
-    return cpu
+        Parameters
+        ----------
+        host : str
+            IP address or FQDN of the device to connect to
+        user : str
+            Username to connect with
+        password : str
+            Password to connect with
 
+        Raises
+        ------
+        None
 
-def memory():
-    """
-    Collect memory usage information
-    Total memory, used memory
+        Returns
+        -------
+        None
+        """
 
-    Parameters
-    ----------
-    None
+        # Authentication information
+        self.host = host
+        self.user = user
+        self.password = password
 
-    Raises
-    ------
-    None
+        # Hardware information
+        self.re = None
+        self.storage = None
+        self.fans = None
 
-    Returns
-    -------
-    mem : dict
-        Dictionary containing memory usage information
-    """
+    def __enter__(self):
+        """
+        Called when the 'with' statement is used
 
-    mem = {
-        "memory": {
-            "total": 1024,
-            "used": 100,
-        }
-    }
+        Parameters
+        ----------
+        None
 
-    return mem
+        Raises
+        ------
+        None
 
+        Returns
+        -------
+        self
+            The instantiated object
+        """
 
-def disk():
-    """
-    Collect disk usage information
-    A list of disks, containing the disk name, size and used space
+        # Connect to device, collect hardware information
+        with netconf.Netconf(
+            host=self.host,
+            user=self.user,
+            password=self.password
+        ) as connection:
+            self.re = connection.rpc_commands(
+                'get-route-engine-information'
+            )
+            self.storage = connection.rpc_commands(
+                'get-system-storage'
+            )
+            self.fans = connection.rpc_commands(
+                'get-fan-information'
+            )
 
-    Parameters
-    ----------
-    None
+        return self
 
-    Raises
-    ------
-    None
+    def __exit__(self, exc_type, exc_value, traceback):
+        """
+        Called when the 'with' statement is finished
 
-    Returns
-    -------
-    disk : dict
-        Dictionary containing disk usage information
-    """
+        Parameters
+        ----------
+        None
 
-    disk = {
-        "disk": [
-            {
-                "disk": "/dev/da1s1a",
-                "size": 1024,
-                "used": 100
-            },
-            {
-                "disk": "/dev/da0s1a",
-                "size": 2048,
-                "used": 512
-            },
-        ]
-    }
+        Raises
+        ------
+        None
 
-    return disk
+        Returns
+        -------
+        self
+            None
+        """
 
+        # handle errors that were raised
+        if exc_type:
+            print(
+                f"Exception of type {exc_type.__name__} occurred: {exc_value}"
+            )
+            if traceback:
+                print("Traceback:")
+                print(tb.format_tb(traceback))
 
-def temperature():
-    """
-    Collect temperature information
-    CPU temperature, and chassis temperature
+    def cpu(self):
+        """
+        Collect CPU usage information
 
-    Parameters
-    ----------
-    None
+        Parameters
+        ----------
+        None
 
-    Raises
-    ------
-    None
+        Raises
+        ------
+        None
 
-    Returns
-    -------
-    temp : dict
-        Dictionary containing temperature information
-    """
+        Returns
+        -------
+        cpu : dict
+            Dictionary containing CPU information
+        """
 
-    temp = {
-        "temperature": {
-            "cpu": 50,
-            "chassis": 30
-        }
-    }
-
-    return temp
-
-
-def fan():
-    """
-    Collect fan information
-    A list of fans, containing the fan name, speed and status
-
-    Parameters
-    ----------
-    None
-
-    Raises
-    ------
-    None
-
-    Returns
-    -------
-    fans : dict
-        Dictionary containing fan information
-    """
-
-    fans = {
-        "fan": [
-            {
-                "fan": "fan0",
-                "status": "ok",
-                "rpm": 3840,
-                "detail": "Normal"
-            },
-            {
-                "fan": "fan1",
-                "status": "ok",
-                "rpm": 3743,
-                "detail": "Normal"
+        engine = self.re['route-engine-information']['route-engine']
+        cpu = {
+            "cpu": {
+                "used": 100 - int(engine['cpu-idle']),
+                "idle": int(engine['cpu-idle']),
+                "1_min": float(engine['load-average-one']),
+                "5_min": float(engine['load-average-five']),
+                "15min": float(engine['load-average-fifteen'])
             }
-        ]
-    }
+        }
 
-    return fans
+        return cpu
+
+    def memory(self):
+        """
+        Collect memory usage information
+
+        Parameters
+        ----------
+        None
+
+        Raises
+        ------
+        None
+
+        Returns
+        -------
+        memory : dict
+            Dictionary containing information
+        """
+
+        engine = self.re['route-engine-information']['route-engine']
+
+        mem = {
+            "memory": {
+                "total": int(engine['memory-system-total']),
+                "used": int(engine['memory-system-total-used']),
+            }
+        }
+
+        return mem
+
+    def disk(self):
+        """
+        Collect disk usage information
+
+        Parameters
+        ----------
+        None
+
+        Raises
+        ------
+        None
+
+        Returns
+        -------
+        storage : dict
+            Dictionary containing information
+        """
+
+        storage = {
+            "disk": []
+        }
+
+        disk_list = self.storage['system-storage-information']['filesystem']
+        entry = {}
+        for disk in disk_list:
+            entry['disk'] = disk['filesystem-name']
+            entry['size'] = disk['total-blocks']['@format']
+            entry['used'] = disk['used-blocks']['@format']
+            storage['disk'].append(entry)
+
+        return storage
+
+    def temperature(self):
+        """
+        Collect temperature information
+
+        Parameters
+        ----------
+        None
+
+        Raises
+        ------
+        None
+
+        Returns
+        -------
+        temp : dict
+            Dictionary containing information
+        """
+
+        engine = self.re['route-engine-information']['route-engine']
+
+        temp = {
+            "temperature": {
+                "cpu": int(engine['cpu-temperature']['@celsius']),
+                "chassis": int(engine['temperature']['@celsius'])
+            }
+        }
+
+        return temp
+
+    def fan(self):
+        """
+        Collect fan information
+
+        Parameters
+        ----------
+        None
+
+        Raises
+        ------
+        None
+
+        Returns
+        -------
+        fan : dict
+            Dictionary containing information
+        """
+
+        fan = {
+            "fan": []
+        }
+
+        for item in self.fans['fan-information']['fan-information-rpm-item']:
+            entry = {}
+            entry['fan'] = item['name']
+            entry['status'] = item['status']
+            entry['rpm'] = item['rpm']
+            entry['detail'] = item['comment']
+            fan['fan'].append(entry)
+
+        return fan
 
 
 # Handle running as a script
