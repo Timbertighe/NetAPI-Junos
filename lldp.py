@@ -4,12 +4,13 @@ LLDP information for Juniper devices
 NOTE: This only returns dummy data at the moment
 
 Modules:
-    3rd Party: None
-    Internal: None
+    3rd Party: traceback
+    Internal: netconf
 
 Classes:
 
-    None
+    Lldp
+        Connect to a Junos device and collect LLDP information
 
 Functions
 
@@ -29,54 +30,205 @@ Author:
 """
 
 
-def interfaces():
-    """
-    Collects LLDP information about connected devices
-    Includes local interface, MAC, system, port name, IP address, vendor,
-        description, model, and serial number
+import traceback as tb
 
-    Parameters
+import netconf
+
+
+class Lldp:
+    """
+    Connect to a Junos device and collect information
+
+    Supports being instantiated with the 'with' statement
+
+    Attributes
     ----------
-    None
+    host : str
+        IP address or FQDN of the device to connect to
+    user : str
+        Username to connect with
+    password : str
+        Password to connect with
 
-    Raises
-    ------
-    None
-
-    Returns
+    Methods
     -------
-    lldp : dict
-        Dictionary containing LLDP information
+    __init__(host, user, password)
+        Class constructor
+    __enter__()
+        Called when the 'with' statement is used
+    __exit__(exc_type, exc_value, traceback)
+        Called when the 'with' statement is finished
+    interfaces()
+        Collects LLDP information about connected devices
     """
 
-    lldp = {
-        "interfaces": [
-            {
-                "name": "ge-0/0/0",
-                "mac": "18:66:da:3f:f2:aa",
-                "system": "WAP-1",
-                "port_name": "ETH0",
-                "ip": "10.1.1.1",
-                "vendor": "Mist Systems.",
-                "description": "Mist Systems 802.11ax Access Point.",
-                "model": "AP43-WW",
-                "serial": "Axxxxxxx"
-            },
-            {
-                "name": "ge-0/0/1",
-                "mac": "18:66:da:3f:f2:ab",
-                "system": "WAP-2",
-                "port_name": "ETH0",
-                "ip": "10.1.1.2",
-                "vendor": "Mist Systems.",
-                "description": "Mist Systems 802.11ax Access Point.",
-                "model": "AP43-WW",
-                "serial": "Axxxxxxx"
-            }
-        ]
-    }
+    def __init__(self, host, user, password):
+        """
+        Class constructor
 
-    return lldp
+        Parameters
+        ----------
+        host : str
+            IP address or FQDN of the device to connect to
+        user : str
+            Username to connect with
+        password : str
+            Password to connect with
+
+        Raises
+        ------
+        None
+
+        Returns
+        -------
+        None
+        """
+
+        # Authentication information
+        self.host = host
+        self.user = user
+        self.password = password
+
+        # Device information
+        self.lldp_interface = None
+
+    def __enter__(self):
+        """
+        Called when the 'with' statement is used
+
+        Parameters
+        ----------
+        None
+
+        Raises
+        ------
+        None
+
+        Returns
+        -------
+        self
+            The instantiated object
+        """
+
+        # Connect to device, collect LLDP information
+        with netconf.Netconf(
+            host=self.host,
+            user=self.user,
+            password=self.password
+        ) as connection:
+            self.lldp_interface = connection.rpc_commands(
+                'get-lldp-neighbor-detail-information',
+            )
+
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """
+        Called when the 'with' statement is finished
+
+        Parameters
+        ----------
+        None
+
+        Raises
+        ------
+        None
+
+        Returns
+        -------
+        self
+            None
+        """
+
+        # handle errors that were raised
+        if exc_type:
+            print(
+                f"Exception of type {exc_type.__name__} occurred: {exc_value}"
+            )
+            if traceback:
+                print("Traceback:")
+                print(tb.format_tb(traceback))
+
+    def interfaces(self):
+        """
+        Collect detailed LLDP information from Juniper devices
+
+        Parameters
+        ----------
+        None
+
+        Raises
+        ------
+        None
+
+        Returns
+        -------
+        my_dict : dict
+            Dictionary containing information
+        """
+
+        my_dict = {
+            "interfaces": []
+        }
+
+        lldp_ints = (
+            self.lldp_interface
+            ['lldp-neighbors-information']
+            ['lldp-neighbor-information']
+        )
+
+        # Iterate through each interface
+        for interface in lldp_ints:
+            # Creating an empty dictionary, as not all these keys
+            #   will be present
+            entry = {
+                'name': '',
+                'mac': '',
+                'system': '',
+                'ip': '',
+                'vendor': '',
+                'description': '',
+                'model': '',
+                'serial': ''
+            }
+
+            if 'lldp-local-interface' in interface:
+                entry['name'] = interface['lldp-local-interface']
+
+            if 'lldp-remote-chassis-id' in interface:
+                entry['mac'] = interface['lldp-remote-chassis-id']
+
+            if 'lldp-remote-system-name' in interface:
+                entry['system'] = interface['lldp-remote-system-name']
+
+            if 'lldp-remote-management-address' in interface:
+                entry['ip'] = interface['lldp-remote-management-address']
+
+            if 'lldp-remote-inventory-manufacturer-name' in interface:
+                entry['vendor'] = (
+                    interface['lldp-remote-inventory-manufacturer-name']
+                )
+
+            if 'lldp-remote-port-description' in interface:
+                entry['description'] = (
+                    interface['lldp-remote-port-description']
+                )
+
+            if 'lldp-system-description' in interface:
+                entry['model'] = (
+                    interface
+                    ['lldp-system-description']
+                    ['lldp-remote-system-description']
+                )
+
+            if 'lldp-remote-inventory-serial-number' in interface:
+                entry['serial'] = (
+                    interface['lldp-remote-inventory-serial-number']
+                )
+
+            my_dict['interfaces'].append(entry)
+
+        return my_dict
 
 
 # Handle running as a script

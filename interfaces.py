@@ -378,36 +378,37 @@ class Interfaces:
                     entry['subinterfaces'].append(sub)
 
             # Check for PoE
-            for poe in self.poe['poe']['interface-information']:
-                # Set empty values
-                entry['poe'] = {}
-                entry['poe']['admin'] = False
-                entry['poe']['operational'] = False
-                entry['poe']['max_power'] = False
-                entry['poe']['power_used'] = False
+            if self.poe is not None:
+                for poe in self.poe['poe']['interface-information']:
+                    # Set empty values
+                    entry['poe'] = {}
+                    entry['poe']['admin'] = False
+                    entry['poe']['operational'] = False
+                    entry['poe']['max_power'] = False
+                    entry['poe']['power_used'] = False
 
-                # Check for real values
-                if poe['interface-name'] == entry['name']:
-                    # Convert to boolean
-                    if poe['interface-enabled'] == 'Enabled':
-                        entry['poe']['admin'] = True
-                    else:
-                        entry['poe']['admin'] = False
+                    # Check for real values
+                    if poe['interface-name'] == entry['name']:
+                        # Convert to boolean
+                        if poe['interface-enabled'] == 'Enabled':
+                            entry['poe']['admin'] = True
+                        else:
+                            entry['poe']['admin'] = False
 
-                    # Convert to boolean
-                    if poe['interface-status'] == 'on':
-                        entry['poe']['operational'] = True
-                    else:
-                        entry['poe']['operational'] = False
+                        # Convert to boolean
+                        if poe['interface-status'] == 'on':
+                            entry['poe']['operational'] = True
+                        else:
+                            entry['poe']['operational'] = False
 
-                    entry['poe']['max_power'] = poe['interface-power-limit']
-                    entry['poe']['power_used'] = poe['interface-power']
-                    continue
+                        entry['poe']['max_power'] = (
+                            poe['interface-power-limit']
+                        )
+                        entry['poe']['power_used'] = poe['interface-power']
+                        continue
 
             # Put it all together
             int_list['interfaces'].append(entry)
-
-        # print(json.dumps(self.poe, indent=4))
 
         return int_list
 

@@ -4,12 +4,13 @@ OSPF information for Juniper devices
 NOTE: This only returns dummy data at the moment
 
 Modules:
-    3rd Party: None
-    Internal: None
+    3rd Party: traceback
+    Internal: netconf
 
 Classes:
 
-    None
+    Ospf
+        Collect OSPF information from Juniper devices
 
 Functions
 
@@ -35,151 +36,300 @@ Author:
 """
 
 
-def ospf():
-    """
-    Collect OSPF information
-    Includes router ID, and reference bandwidth
+import traceback as tb
 
-    Parameters
+import netconf
+
+
+class Ospf:
+    """
+    Connect to a Junos device and collect information
+
+    Supports being instantiated with the 'with' statement
+
+    Attributes
     ----------
-    None
+    host : str
+        IP address or FQDN of the device to connect to
+    user : str
+        Username to connect with
+    password : str
+        Password to connect with
 
-    Raises
-    ------
-    None
-
-    Returns
+    Methods
     -------
-    ospf : dict
-        Dictionary containing OSPF information
+    __init__(host, user, password)
+        Class constructor
+    __enter__()
+        Called when the 'with' statement is used
+    __exit__(exc_type, exc_value, traceback)
+        Called when the 'with' statement is finished
+    ospf()
+        Get general OSPF information
+    areas()
+        Get OSPF area information
+    neighbours()
+        Get OSPF neighbour information
+    interfaces()
+        Get OSPF interface information
     """
 
-    ospf = {
-        "id": "10.250.1.1",
-        "reference": "100g"
-    }
+    def __init__(self, host, user, password):
+        """
+        Class constructor
 
-    return ospf
+        Parameters
+        ----------
+        host : str
+            IP address or FQDN of the device to connect to
+        user : str
+            Username to connect with
+        password : str
+            Password to connect with
 
+        Raises
+        ------
+        None
 
-def areas():
-    """
-    Collect OSPF area information
-    Includes area ID, area type, authentication, and neighbours
+        Returns
+        -------
+        None
+        """
 
-    Parameters
-    ----------
-    None
+        # Authentication information
+        self.host = host
+        self.user = user
+        self.password = password
 
-    Raises
-    ------
-    None
+        # Device information
+        self.config = None
+        self.neighbour_info = None
+        self.interface_info = None
 
-    Returns
-    -------
-    areas : dict
-        Dictionary containing OSPF area information
-    """
+    def __enter__(self):
+        """
+        Called when the 'with' statement is used
 
-    areas = {
-        "areas": [
-            {
-                "id": "0.0.0.10",
-                "type": "stub",
-                "authentication": "none",
-                "neighbors": 2
-            },
-            {
-                "id": "0.0.0.0",
-                "type": "normal",
-                "authentication": "none",
-                "neighbors": 4
-            }
-        ]
-    }
+        Parameters
+        ----------
+        None
 
-    return areas
+        Raises
+        ------
+        None
 
+        Returns
+        -------
+        self
+            The instantiated object
+        """
 
-def neighbours():
-    """
-    Collect OSPF neighbour information
-    Includes neighbour IP, state, interface, router ID, and area
+        # Connect to device, collect facts, license, and config
+        with netconf.Netconf(
+            host=self.host,
+            user=self.user,
+            password=self.password
+        ) as connection:
+            self.config = connection.get_config(
+                filter=[
+                    'protocols/ospf',
+                ]
+            )
+            self.overview = connection.rpc_commands(
+                'get-ospf-overview-information'
+            )
+            self.neighbour_info = connection.rpc_commands(
+                'get-ospf-neighbor-information'
+            )
+            self.interface_info = connection.rpc_commands(
+                'get-ospf-interface-information'
+            )
 
-    Parameters
-    ----------
-    None
+        return self
 
-    Raises
-    ------
-    None
+    def __exit__(self, exc_type, exc_value, traceback):
+        """
+        Called when the 'with' statement is finished
 
-    Returns
-    -------
-    neighbour : dict
-        Dictionary containing OSPF neighbour information
-    """
+        Parameters
+        ----------
+        None
 
-    neighbour = {
-        "neighbor": [
-            {
-                "address": "172.16.1.1",
-                "interface": "ge-0/0/0.0",
-                "state": "full",
-                "id": "10.250.1.1",
-                "area": "0.0.0.10"
-            },
-            {
-                "address": "172.16.2.2",
-                "interface": "ge-0/0/1.0",
-                "state": "full",
-                "id": "10.250.2.1",
-                "area": "0.0.0.0"
-            }
-        ]
-    }
+        Raises
+        ------
+        None
 
-    return neighbour
+        Returns
+        -------
+        self
+            None
+        """
 
+        # handle errors that were raised
+        if exc_type:
+            print(
+                f"Exception of type {exc_type.__name__} occurred: {exc_value}"
+            )
+            if traceback:
+                print("Traceback:")
+                print(tb.format_tb(traceback))
 
-def interfaces():
-    """
-    Collect OSPF interface information
-    Includes interface name, state, area, neighbour count, mtu, cost, type,
-        mask, authentication, and passive interface
+    def ospf(self):
+        """
+        Get general OSPF information
 
-    Parameters
-    ----------
-    None
+        Parameters
+        ----------
+        None
 
-    Raises
-    ------
-    None
+        Raises
+        ------
+        None
 
-    Returns
-    -------
-    interface : dict
-        Dictionary containing OSPF interface information
-    """
+        Returns
+        -------
+        my_dict : dict
+            Dictionary containing information
+        """
 
-    interface = {
-        "interface": [
-            {
-                "name": "ge-0/0/0.0",
-                "state": "DROther",
-                "area": "0.0.0.10",
-                "neighbors": 0,
-                "mtu": 1500,
-                "cost": 10,
-                "type": "broadcast",
-                "mask": "255.255.255.0",
-                "authentication": "none",
-                "passive": False
-            }
-        ]
-    }
+        # Build dictionary of information
+        my_dict = {
+            "id": (
+                self.overview
+                ['ospf-overview-information']
+                ['ospf-overview']
+                ['ospf-router-id']
+            ),
+            "reference": (
+                self.config
+                ['configuration']
+                ['protocols']
+                ['ospf']
+                ['reference-bandwidth']
+            )
+        }
 
-    return interface
+        return my_dict
+
+    def areas(self):
+        """
+        Collect OSPF area information
+
+        Parameters
+        ----------
+        None
+
+        Raises
+        ------
+        None
+
+        Returns
+        -------
+        my_dict : dict
+            Dictionary containing information
+        """
+
+        my_dict = {
+            "areas": []
+        }
+
+        # Get the list of areas from config
+        areas = (
+            self.overview
+            ['ospf-overview-information']
+            ['ospf-overview']
+            ['ospf-area-overview']
+        )
+
+        # Make it a list
+        if type(areas) is not list:
+            areas = [areas]
+
+        # For each area, get the information
+        for area in areas:
+            entry = {}
+            entry['id'] = area['ospf-area']
+            entry['type'] = area['ospf-stub-type']
+            entry['authentication'] = area['authentication-type']
+            entry['neighbors'] = area['ospf-nbr-overview']['ospf-nbr-up-count']
+            my_dict['areas'].append(entry)
+
+        return my_dict
+
+    def neighbours(self):
+        """
+        Collect OSPF neighbour information
+
+        Parameters
+        ----------
+        None
+
+        Raises
+        ------
+        None
+
+        Returns
+        -------
+        my_dict : dict
+            Dictionary containing information
+        """
+
+        my_dict = {
+            "neighbor": []
+        }
+
+        # Get a list of neighbours
+        neighbour_list = (
+            self.neighbour_info
+            ['ospf-neighbor-information']
+            ['ospf-neighbor']
+        )
+        for neighbour in neighbour_list:
+            entry = {}
+            entry['address'] = neighbour['neighbor-address']
+            entry['interface'] = neighbour['interface-name']
+            entry['state'] = neighbour['ospf-neighbor-state']
+            entry['id'] = neighbour['neighbor-id']
+            my_dict['neighbor'].append(entry)
+
+        return my_dict
+
+    def interfaces(self):
+        """
+        Collect OSPF interface information
+
+        Parameters
+        ----------
+        None
+
+        Raises
+        ------
+        None
+
+        Returns
+        -------
+        my_dict : dict
+            Dictionary containing information
+        """
+
+        my_dict = {
+            "interface": []
+        }
+
+        int_list = (
+            self.interface_info
+            ['ospf-interface-information']
+            ['ospf-interface']
+        )
+        for interface in int_list:
+            entry = {}
+            entry['name'] = interface['interface-name']
+            entry['state'] = interface['ospf-interface-state']
+            entry['area'] = interface['ospf-area']
+            entry['neighbors'] = interface['neighbor-count']
+            my_dict['interface'].append(entry)
+
+        return my_dict
 
 
 # Handle running as a script

@@ -129,12 +129,16 @@ def device_hardware(host, user, password):
     """
 
     info = {}
-
-    info.update(hardware.cpu())
-    info.update(hardware.memory())
-    info.update(hardware.disk())
-    info.update(hardware.temperature())
-    info.update(hardware.fan())
+    with hardware.Hardware(
+        host=host,
+        user=user,
+        password=password
+    ) as my_device:
+        info.update(my_device.cpu())
+        info.update(my_device.memory())
+        info.update(my_device.disk())
+        info.update(my_device.temperature())
+        info.update(my_device.fan())
 
     return json.dumps(info)
 
@@ -162,11 +166,12 @@ def device_interfaces(host, user, password):
         JSON formatted string containing interface information
     """
 
-    info = {}
-
-    info.update(interfaces.interfaces())
-
-    return json.dumps(info)
+    with interfaces.Interfaces(
+        host=host,
+        user=user,
+        password=password
+    ) as my_device:
+        return json.dumps(my_device.interfaces())
 
 
 def device_lldp(host, user, password):
@@ -192,11 +197,12 @@ def device_lldp(host, user, password):
         JSON formatted string containing LLDP information
     """
 
-    info = {}
-
-    info.update(lldp.interfaces())
-
-    return json.dumps(info)
+    with lldp.Lldp(
+        host=host,
+        user=user,
+        password=password
+    ) as my_device:
+        return json.dumps(my_device.interfaces())
 
 
 def device_vlans(host, user, password):
@@ -222,11 +228,12 @@ def device_vlans(host, user, password):
         JSON formatted string containing VLAN information
     """
 
-    info = {}
-
-    info.update(vlans.vlans())
-
-    return json.dumps(info)
+    with vlans.Vlan(
+        host=host,
+        user=user,
+        password=password
+    ) as my_device:
+        return json.dumps(my_device.vlans())
 
 
 def device_mac(host, user, password):
@@ -252,11 +259,12 @@ def device_mac(host, user, password):
         JSON formatted string containing MAC information
     """
 
-    info = {}
-
-    info.update(mac.mac_table())
-
-    return json.dumps(info)
+    with mac.Mac(
+        host=host,
+        user=user,
+        password=password
+    ) as my_device:
+        return json.dumps(my_device.mac())
 
 
 def device_routing(host, user, password):
@@ -282,11 +290,12 @@ def device_routing(host, user, password):
         JSON formatted string containing routing table information
     """
 
-    info = {}
-
-    info.update(routing.routing_table())
-
-    return json.dumps(info)
+    with routing.Routing(
+        host=host,
+        user=user,
+        password=password
+    ) as my_device:
+        return json.dumps(my_device.routing_table())
 
 
 def device_ospf(host, user, password):
@@ -314,10 +323,15 @@ def device_ospf(host, user, password):
 
     info = {}
 
-    info.update(ospf.ospf())
-    info.update(ospf.areas())
-    info.update(ospf.neighbours())
-    info.update(ospf.interfaces())
+    with ospf.Ospf(
+        host=host,
+        user=user,
+        password=password
+    ) as my_device:
+        info.update(my_device.ospf())
+        info.update(my_device.areas())
+        info.update(my_device.neighbours())
+        info.update(my_device.interfaces())
 
     return json.dumps(info)
 

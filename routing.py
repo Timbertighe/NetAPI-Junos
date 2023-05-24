@@ -4,12 +4,13 @@ Routing table information for Juniper devices
 NOTE: This only returns dummy data at the moment
 
 Modules:
-    3rd Party: None
-    Internal: None
+    3rd Party: traceback
+    Internal: netconf
 
 Classes:
 
-    None
+    Routing
+        Collect routing information from Juniper devices
 
 Functions
 
@@ -29,55 +30,203 @@ Author:
 """
 
 
-def routing_table():
-    """
-    Collect routing table information
-    Includes routes, and next-hop information
+import traceback as tb
 
-    Parameters
+import netconf
+
+
+class Routing:
+    """
+    Connect to a Junos device and collect information
+
+    Supports being instantiated with the 'with' statement
+
+    Attributes
     ----------
-    None
+    host : str
+        IP address or FQDN of the device to connect to
+    user : str
+        Username to connect with
+    password : str
+        Password to connect with
 
-    Raises
-    ------
-    None
-
-    Returns
+    Methods
     -------
-    routes : dict
-        Dictionary containing template information
+    __init__(host, user, password)
+        Class constructor
+    __enter__()
+        Called when the 'with' statement is used
+    __exit__(exc_type, exc_value, traceback)
+        Called when the 'with' statement is finished
+    routing_table()
+        Collect routing table information
     """
 
-    routes = {
-        "entry": [
-            {
-                "route": "10.10.10.0/24",
-                "next_hop": [
-                    {
-                        "hop": "172.16.1.1",
-                        "protocol": "static/5",
-                        "interface": "ge-0/0/0.0",
-                        "metric": "0",
-                        "active": True
-                    }
-                ]
-            },
-            {
-                "route": "0.0.0.0/0",
-                "next_hop": [
-                    {
-                        "hop": "172.16.1.2",
-                        "protocol": "static/5",
-                        "interface": "irb.10",
-                        "metric": "100",
-                        "active": True
-                    }
-                ]
-            }
-        ]
-    }
+    def __init__(self, host, user, password):
+        """
+        Class constructor
 
-    return routes
+        Parameters
+        ----------
+        host : str
+            IP address or FQDN of the device to connect to
+        user : str
+            Username to connect with
+        password : str
+            Password to connect with
+
+        Raises
+        ------
+        None
+
+        Returns
+        -------
+        None
+        """
+
+        # Authentication information
+        self.host = host
+        self.user = user
+        self.password = password
+
+        # Device information
+        self.routing = None
+
+    def __enter__(self):
+        """
+        Called when the 'with' statement is used
+
+        Parameters
+        ----------
+        None
+
+        Raises
+        ------
+        None
+
+        Returns
+        -------
+        self
+            The instantiated object
+        """
+
+        # Connect to device, collect facts, license, and config
+        with netconf.Netconf(
+            host=self.host,
+            user=self.user,
+            password=self.password
+        ) as connection:
+            self.routing = connection.rpc_commands(
+                'get-route-information'
+            )
+
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """
+        Called when the 'with' statement is finished
+
+        Parameters
+        ----------
+        None
+
+        Raises
+        ------
+        None
+
+        Returns
+        -------
+        self
+            None
+        """
+
+        # handle errors that were raised
+        if exc_type:
+            print(
+                f"Exception of type {exc_type.__name__} occurred: {exc_value}"
+            )
+            if traceback:
+                print("Traceback:")
+                print(tb.format_tb(traceback))
+
+    def routing_table(self):
+        """
+        Collect routing table information
+
+        Parameters
+        ----------
+        None
+
+        Raises
+        ------
+        None
+
+        Returns
+        -------
+        my_dict : dict
+            Dictionary containing information
+        """
+
+        my_dict = {
+            "entry": []
+        }
+
+        # Only supports the IPv4 Unicast table for now
+        ipv4_table = None
+        for table in self.routing['route-information']['route-table']:
+            if table['table-name'] == 'inet.0':
+                ipv4_table = table['rt']
+                break
+
+        # Loop through the routes in the table
+        for route in ipv4_table:
+            entry = {}
+            entry['protocol'] = route['rt-entry']['protocol-name']
+
+            # Don't worry about internal routes
+            if entry['protocol'] == 'Access-internal':
+                continue
+
+            # Get the destination
+            entry['route'] = route['rt-destination']
+
+            # Some types don't have a metric
+            if entry['protocol'] == 'Direct' or entry['protocol'] == 'Local':
+                entry['metric'] = 0
+            else:
+                entry['metric'] = route['rt-entry']['metric']
+
+            # Get a list of next hops
+            #   Some types don't have a next hop (eg, reject routes)
+            if 'nh' in route['rt-entry']:
+                entry['next_hop'] = []
+                next_hop = route['rt-entry']['nh']
+                if type(next_hop) is not list:
+                    next_hop = [next_hop]
+
+                # Loop through the next hops
+                for hop in next_hop:
+                    hop_dict = {}
+
+                    # Get the next-hop IP address
+                    #   Some types don't have an IP address
+                    if 'to' not in hop:
+                        hop_dict['hop'] = None
+                    else:
+                        hop_dict['hop'] = hop['to']
+
+                    # Get the next-hop interface
+                    #   Some types don't have an interface
+                    if 'via' not in hop:
+                        hop_dict['interface'] = None
+                    else:
+                        hop_dict['interface'] = hop['via']
+
+                    entry['next_hop'].append(hop_dict)
+
+            my_dict['entry'].append(entry)
+
+        return my_dict
 
 
 # Handle running as a script

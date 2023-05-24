@@ -569,8 +569,9 @@ class Device:
 
             # Get a list of SNMP clients
             client_list = []
-            for client in server['clients']:
-                client_list.append(client['name'])
+            if 'clients' in server:
+                for client in server['clients']:
+                    client_list.append(client['name'])
 
             entry['clients'] = client_list
 
