@@ -365,6 +365,7 @@ class Netconf:
                 'status': 'error',
                 'error': err
             }
+            raise err
 
         return output
 
