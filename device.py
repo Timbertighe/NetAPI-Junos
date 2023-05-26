@@ -142,6 +142,10 @@ class Device:
             user=self.user,
             password=self.password
         ) as connection:
+            # If there was a failire to connect, return
+            if connection.dev is None:
+                return
+
             facts = connection.dev.facts
             self.raw_license = connection.rpc_commands(
                 'get-license-information'
@@ -157,17 +161,48 @@ class Device:
                 ]
             )
 
-            uptime = facts["RE0"]["up_time"].split(", ")
-            days = uptime[0].split(" ")[0]
-            hours = uptime[1].split(" ")[0]
-            minutes = uptime[2].split(" ")[0]
-            seconds = uptime[3].split(" ")[0]
+            # Get the master RE
+            #   This is needed as not all RE's report uptime
+            '''
+            BUG in PyEZ:
+            If RE2 is the master, it will not be present in device facts
+            Logged issue: https://github.com/Juniper/py-junos-eznc/issues/1251
+            '''
+            if facts['RE0'] is not None:
+                master_re = 'RE0'
+            elif facts['RE1'] is not None:
+                master_re = 'RE1'
+            elif facts['RE2'] is not None:
+                master_re = 'RE2'
+            else:
+                master_re = 'RE3'
 
+            # Extract uptime from the master RE
+            uptime = facts[master_re]["up_time"].split(", ")
+            days = 0
+            hours = 0
+            minutes = 0
+            seconds = 0
+
+            # The uptime string may not contain all these values
+            #   Find if they exist, and extract them
+            for item in uptime:
+                if "days" in item:
+                    days = item.split(" ")[0]
+                elif "hours" in item:
+                    hours = item.split(" ")[0]
+                elif "minutes" in item:
+                    minutes = item.split(" ")[0]
+                elif "seconds" in item:
+                    seconds = item.split(" ")[0]
+
+            # Convert uptime to seconds
             uptime = int(days) * 86400
             uptime += int(hours) * 3600
             uptime += int(minutes) * 60
             uptime += int(seconds)
 
+            # Get the rest of the device facts
             self.hostname = facts["hostname"]
             self.serial = facts["serialnumber"]
             self.model = facts["model"]
@@ -565,7 +600,11 @@ class Device:
 
             # Extract SNMP community information
             entry['community'] = server['name']
-            entry['access'] = server['authorization']
+
+            if 'authorization' in server:
+                entry['access'] = server['authorization']
+            else:
+                entry['access'] = ''
 
             # Get a list of SNMP clients
             client_list = []
