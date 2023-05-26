@@ -94,7 +94,17 @@ def device_info(host, user, password):
     info = {}
 
     with device.Device(host=host, user=user, password=password) as my_device:
-        info.update(my_device.facts())
+        try:
+            info.update(my_device.facts())
+        except Exception as error:
+            print(f"Error connecting to {host}: {error}")
+            return json.dumps(
+                {
+                    'status': 'Juniper plugin error',
+                    'error': f'There was an error connecting to {host}'
+                }
+            )
+
         info.update(my_device.license())
         info.update(my_device.radius())
         info.update(my_device.syslog())
@@ -134,7 +144,16 @@ def device_hardware(host, user, password):
         user=user,
         password=password
     ) as my_device:
-        info.update(my_device.cpu())
+        try:
+            info.update(my_device.cpu())
+        except Exception:
+            return json.dumps(
+                {
+                    'status': 'Juniper plugin error',
+                    'error': f'There was an error connecting to {host}'
+                }
+            )
+
         info.update(my_device.memory())
         info.update(my_device.disk())
         info.update(my_device.temperature())
@@ -171,7 +190,15 @@ def device_interfaces(host, user, password):
         user=user,
         password=password
     ) as my_device:
-        return json.dumps(my_device.interfaces())
+        try:
+            return json.dumps(my_device.interfaces())
+        except Exception:
+            return json.dumps(
+                {
+                    'status': 'Juniper plugin error',
+                    'error': f'There was an error connecting to {host}'
+                }
+            )
 
 
 def device_lldp(host, user, password):
@@ -202,7 +229,15 @@ def device_lldp(host, user, password):
         user=user,
         password=password
     ) as my_device:
-        return json.dumps(my_device.interfaces())
+        try:
+            return json.dumps(my_device.interfaces())
+        except Exception:
+            return json.dumps(
+                {
+                    'status': 'Juniper plugin error',
+                    'error': f'There was an error connecting to {host}'
+                }
+            )
 
 
 def device_vlans(host, user, password):
@@ -233,7 +268,15 @@ def device_vlans(host, user, password):
         user=user,
         password=password
     ) as my_device:
-        return json.dumps(my_device.vlans())
+        try:
+            return json.dumps(my_device.vlans())
+        except Exception:
+            return json.dumps(
+                {
+                    'status': 'Juniper plugin error',
+                    'error': f'There was an error connecting to {host}'
+                }
+            )
 
 
 def device_mac(host, user, password):
@@ -264,7 +307,15 @@ def device_mac(host, user, password):
         user=user,
         password=password
     ) as my_device:
-        return json.dumps(my_device.mac())
+        try:
+            return json.dumps(my_device.mac())
+        except Exception:
+            return json.dumps(
+                {
+                    'status': 'Juniper plugin error',
+                    'error': f'There was an error connecting to {host}'
+                }
+            )
 
 
 def device_routing(host, user, password):
@@ -295,7 +346,15 @@ def device_routing(host, user, password):
         user=user,
         password=password
     ) as my_device:
-        return json.dumps(my_device.routing_table())
+        try:
+            return json.dumps(my_device.routing_table())
+        except Exception:
+            return json.dumps(
+                {
+                    'status': 'Juniper plugin error',
+                    'error': f'There was an error connecting to {host}'
+                }
+            )
 
 
 def device_ospf(host, user, password):
@@ -328,7 +387,16 @@ def device_ospf(host, user, password):
         user=user,
         password=password
     ) as my_device:
-        info.update(my_device.ospf())
+        try:
+            info.update(my_device.ospf())
+        except Exception:
+            return json.dumps(
+                {
+                    'status': 'Juniper plugin error',
+                    'error': f'There was an error connecting to {host}'
+                }
+            )
+
         info.update(my_device.areas())
         info.update(my_device.neighbours())
         info.update(my_device.interfaces())
@@ -373,4 +441,9 @@ def rpc_server():
 
 # Run the server
 if __name__ == '__main__':
-    rpc_server()
+    # Nicely handle keyboard interrupts
+    try:
+        rpc_server()
+        raise KeyboardInterrupt
+    except KeyboardInterrupt:
+        print('Exiting...')
