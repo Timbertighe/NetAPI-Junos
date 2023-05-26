@@ -437,7 +437,10 @@ class Netconf:
             filter += '</configuration>'
 
             try:
-                config = self.dev.rpc.get_config(filter_xml=filter)
+                config = self.dev.rpc.get_config(
+                    filter_xml=filter,
+                    options={'inherit': 'inherit'}
+                )
 
             except Exception as err:
                 if 'bad_element' in str(err):
