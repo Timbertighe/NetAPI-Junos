@@ -133,15 +133,30 @@ class Hardware:
             user=self.user,
             password=self.password
         ) as connection:
+            # If there was a failire to connect, return
+            if connection.dev is None:
+                return
+
+            facts = connection.dev.facts
+            model = facts['model']
+
             self.re = connection.rpc_commands(
                 'get-route-engine-information'
             )
             self.storage = connection.rpc_commands(
                 'get-system-storage'
             )
-            self.fans = connection.rpc_commands(
-                'get-fan-information'
-            )
+
+            # EX devices use 'get-environment-information'
+            #   SRX devices use 'get-fan-information'
+            if 'EX' in model:
+                self.fans = connection.rpc_commands(
+                    'get-environment-information'
+                )
+            else:
+                self.fans = connection.rpc_commands(
+                    'get-fan-information'
+                )
 
         return self
 
@@ -190,16 +205,25 @@ class Hardware:
             Dictionary containing CPU information
         """
 
-        engine = self.re['route-engine-information']['route-engine']
         cpu = {
-            "cpu": {
-                "used": 100 - int(engine['cpu-idle']),
-                "idle": int(engine['cpu-idle']),
-                "1_min": float(engine['load-average-one']),
-                "5_min": float(engine['load-average-five']),
-                "15min": float(engine['load-average-fifteen'])
-            }
+            "cpu": []
         }
+
+        # Get the routing information information
+        #   Keep in mind there may be more than one RE
+        engine = self.re['route-engine-information']['route-engine']
+        if type(engine) is not list:
+            engine = [engine]
+
+        for rengine in engine:
+            entry = {
+                "used": 100 - int(rengine['cpu-idle']),
+                "idle": int(rengine['cpu-idle']),
+                "1_min": float(rengine['load-average-one']),
+                "5_min": float(rengine['load-average-five']),
+                "15min": float(rengine['load-average-fifteen'])
+            }
+            cpu['cpu'].append(entry)
 
         return cpu
 
@@ -221,14 +245,36 @@ class Hardware:
             Dictionary containing information
         """
 
-        engine = self.re['route-engine-information']['route-engine']
-
         mem = {
-            "memory": {
-                "total": int(engine['memory-system-total']),
-                "used": int(engine['memory-system-total-used']),
-            }
+            "memory": []
         }
+
+        # Get the routing information information
+        #   Keep in mind there may be more than one RE
+        engine = self.re['route-engine-information']['route-engine']
+        if type(engine) is not list:
+            engine = [engine]
+
+        for rengine in engine:
+            entry = {}
+
+            # Get the total memory
+            #   Some devices use 'memory-dram-size',
+            #   others use 'memory-system-total'
+            if 'memory-dram-size' in rengine:
+                entry['total'] = int(rengine['memory-dram-size'].split()[0])
+            else:
+                entry['total'] = int(rengine['memory-system-total'])
+
+            # Get the used memory
+            #   Some devices use 'memory-buffer-utilization',
+            #   others use 'memory-system-total-used'
+            if 'memory-buffer-utilization' in rengine:
+                entry['used'] = int(rengine['memory-buffer-utilization'])
+            else:
+                entry['used'] = int(rengine['memory-system-total-used'])
+
+            mem['memory'].append(entry)
 
         return mem
 
@@ -254,13 +300,50 @@ class Hardware:
             "disk": []
         }
 
-        disk_list = self.storage['system-storage-information']['filesystem']
-        entry = {}
-        for disk in disk_list:
-            entry['disk'] = disk['filesystem-name']
-            entry['size'] = disk['total-blocks']['@format']
-            entry['used'] = disk['used-blocks']['@format']
-            storage['disk'].append(entry)
+        # Disk information is formatted differently for SRX and EX
+        if 'system-storage-information' in self.storage:
+            disk_list = (
+                self.storage['system-storage-information']['filesystem']
+            )
+            for disk in disk_list:
+                entry = {
+                    "filesystem": []
+                }
+                entry_filesystem = {}
+                entry_filesystem['disk'] = disk['filesystem-name']
+                entry_filesystem['size'] = disk['total-blocks']['@format']
+                entry_filesystem['used'] = disk['used-blocks']['@format']
+                entry['filesystem'].append(entry_filesystem)
+
+        else:
+            disk_list = (
+                self.storage
+                ['multi-routing-engine-results']
+                ['multi-routing-engine-item']
+            )
+
+            # This may or may not already be a list
+            if type(disk_list) is not list:
+                disk_list = [disk_list]
+
+            for disk in disk_list:
+                entry = {
+                    "filesystem": []
+                }
+                for filesystem in (
+                    disk['system-storage-information']['filesystem']
+                ):
+                    entry_filesystem = {}
+                    entry_filesystem['disk'] = filesystem['filesystem-name']
+                    entry_filesystem['size'] = (
+                        filesystem['total-blocks']['@format']
+                    )
+                    entry_filesystem['used'] = (
+                        filesystem['used-blocks']['@format']
+                    )
+                    entry['filesystem'].append(entry_filesystem)
+
+        storage['disk'].append(entry)
 
         return storage
 
@@ -282,14 +365,22 @@ class Hardware:
             Dictionary containing information
         """
 
-        engine = self.re['route-engine-information']['route-engine']
-
         temp = {
-            "temperature": {
-                "cpu": int(engine['cpu-temperature']['@celsius']),
-                "chassis": int(engine['temperature']['@celsius'])
-            }
+            "temperature": []
         }
+
+        # Get the routing information information
+        #   Keep in mind there may be more than one RE
+        engine = self.re['route-engine-information']['route-engine']
+        if type(engine) is not list:
+            engine = [engine]
+
+        for rengine in engine:
+            entry = {
+                "cpu": int(rengine['cpu-temperature']['@celsius']),
+                "chassis": int(rengine['temperature']['@celsius'])
+            }
+            temp['temperature'].append(entry)
 
         return temp
 
@@ -315,13 +406,30 @@ class Hardware:
             "fan": []
         }
 
-        for item in self.fans['fan-information']['fan-information-rpm-item']:
-            entry = {}
-            entry['fan'] = item['name']
-            entry['status'] = item['status']
-            entry['rpm'] = item['rpm']
-            entry['detail'] = item['comment']
-            fan['fan'].append(entry)
+        # Fan information is formatted differently for SRX and EX
+        if 'environment-information' in self.fans:
+            for item in (
+                self.fans['environment-information']['environment-item']
+            ):
+                if item['class'] == 'Fans':
+                    entry = {}
+                    entry['fan'] = item['name']
+                    entry['status'] = item['status']
+                    entry['rpm'] = 'N/A'
+                    entry['detail'] = item['comment']
+                    fan['fan'].append(entry)
+
+        # SRX formatting
+        else:
+            for item in (
+                self.fans['fan-information']['fan-information-rpm-item']
+            ):
+                entry = {}
+                entry['fan'] = item['name']
+                entry['status'] = item['status']
+                entry['rpm'] = item['rpm']
+                entry['detail'] = item['comment']
+                fan['fan'].append(entry)
 
         return fan
 
