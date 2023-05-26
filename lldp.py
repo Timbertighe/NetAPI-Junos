@@ -116,9 +116,22 @@ class Lldp:
             user=self.user,
             password=self.password
         ) as connection:
-            self.lldp_interface = connection.rpc_commands(
-                'get-lldp-neighbor-detail-information',
-            )
+            # If there was a failure to connect, return
+            if connection.dev is None:
+                return
+
+            # Collect LLDP information
+            try:
+                self.lldp_interface = connection.rpc_commands(
+                    'get-lldp-neighbor-detail-information',
+                )
+
+            # Some junos versions do not support the 'detail' keyword
+            except Exception:
+                print("Old junos version, using non-detailed LLDP")
+                self.lldp_interface = connection.rpc_commands(
+                    'get-lldp-neighbors-information'
+                )
 
         return self
 
@@ -167,15 +180,26 @@ class Lldp:
             Dictionary containing information
         """
 
+        print('DEBUG #1')
+
         my_dict = {
             "interfaces": []
         }
+
+        print(self.lldp_interface)
 
         lldp_ints = (
             self.lldp_interface
             ['lldp-neighbors-information']
             ['lldp-neighbor-information']
         )
+
+        print(lldp_ints)
+
+        if type(lldp_ints) is not list:
+            lldp_ints = [lldp_ints]
+
+        print('DEBUG #2')
 
         # Iterate through each interface
         for interface in lldp_ints:
