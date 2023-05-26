@@ -118,6 +118,11 @@ class Interfaces:
             user=self.user,
             password=self.password
         ) as connection:
+            # If there was a failire to connect, return
+            if connection.dev is None:
+                return
+
+            # Collect interface information
             self.interface_list = connection.rpc_commands(
                 'get-interface-information'
             )
