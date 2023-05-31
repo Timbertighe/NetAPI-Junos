@@ -372,14 +372,25 @@ class Hardware:
         # Get the routing information information
         #   Keep in mind there may be more than one RE
         engine = self.re['route-engine-information']['route-engine']
+
         if type(engine) is not list:
             engine = [engine]
 
         for rengine in engine:
-            entry = {
-                "cpu": int(rengine['cpu-temperature']['@celsius']),
-                "chassis": int(rengine['temperature']['@celsius'])
-            }
+            # If this is actually recorded
+            if 'cpu-temperature' in rengine and 'temperature' in rengine:
+                entry = {
+                    "cpu": int(rengine['cpu-temperature']['@celsius']),
+                    "chassis": int(rengine['temperature']['@celsius'])
+                }
+
+            # Older models may not record this
+            else:
+                entry = {
+                    "cpu": 'N/A',
+                    "chassis": 'N/A'
+                }
+
             temp['temperature'].append(entry)
 
         return temp
@@ -416,7 +427,12 @@ class Hardware:
                     entry['fan'] = item['name']
                     entry['status'] = item['status']
                     entry['rpm'] = 'N/A'
-                    entry['detail'] = item['comment']
+
+                    if 'comment' in item:
+                        entry['detail'] = item['comment']
+                    else:
+                        entry['detail'] = 'N/A'
+
                     fan['fan'].append(entry)
 
         # SRX formatting
