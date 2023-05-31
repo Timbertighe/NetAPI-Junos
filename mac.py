@@ -116,6 +116,11 @@ class Mac:
             user=self.user,
             password=self.password
         ) as connection:
+            # If there was a failure to connect, return
+            if connection.dev is None:
+                return
+
+            # Collect MAC address table information
             self.mac_table = connection.rpc_commands(
                 'get-ethernet-switching-table-information'
             )
@@ -171,21 +176,47 @@ class Mac:
             "entry": []
         }
 
-        # Get the MAC address table, if one exists
-        if len(self.mac_table) > 1:
+        # Handle newer and older versions of Junos
+        #   Newer versions have a different structure
+        if 'l2ng-l2ald-rtb-macdb' in self.mac_table:
+
+            # Get the MAC address table, if one exists
+            #   Routers don't have MAC address table entries, only ARP
+            if self.mac_table['l2ng-l2ald-rtb-macdb'] is not None:
+                mac_table = (
+                    self.mac_table
+                    ['l2ng-l2ald-rtb-macdb']
+                    ['l2ng-l2ald-mac-entry-vlan']
+                    ['l2ng-mac-entry']
+                )
+
+                # Loop through the MAC address table and add to the dictionary
+                for address in mac_table:
+                    entry = {}
+                    entry['mac'] = address['l2ng-l2-mac-address']
+                    entry['vlan'] = address['l2ng-l2-mac-vlan-name']
+                    entry['interface'] = (
+                        address['l2ng-l2-mac-logical-interface']
+                    )
+                    my_dict['entry'].append(entry)
+
+        # Older versions have a different structure
+        elif 'ethernet-switching-table-information' in self.mac_table:
             mac_table = (
                 self.mac_table
-                ['l2ng-l2ald-rtb-macdb']
-                ['l2ng-l2ald-mac-entry-vlan']
-                ['l2ng-mac-entry']
+                ['ethernet-switching-table-information']
+                ['ethernet-switching-table']
+                ['mac-table-entry']
             )
 
             # Loop through the MAC address table and add to the dictionary
             for address in mac_table:
                 entry = {}
-                entry['mac'] = address['l2ng-l2-mac-address']
-                entry['vlan'] = address['l2ng-l2-mac-vlan-name']
-                entry['interface'] = address['l2ng-l2-mac-logical-interface']
+                entry['mac'] = address['mac-address']
+                entry['vlan'] = address['mac-vlan']
+                entry['interface'] = (
+                    address['mac-interfaces-list']['mac-interfaces']
+                )
                 my_dict['entry'].append(entry)
 
         return my_dict
