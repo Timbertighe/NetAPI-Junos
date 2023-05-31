@@ -147,6 +147,7 @@ class Device:
                 return
 
             facts = connection.dev.facts
+
             self.raw_license = connection.rpc_commands(
                 'get-license-information'
             )
@@ -286,7 +287,7 @@ class Device:
 
         # If no licenses are installed, return None as the license id
         if 'no-licenses-installed' in self.raw_license['license-information']:
-            licenses = {
+            licences = {
                 "licenses": [
                     {
                         "lic_id": None,
@@ -294,32 +295,38 @@ class Device:
                 ]
             }
 
-            return licenses
+            return licences
 
         # Get license information
         #   If multiple licenses are installed, they will be in a list
-        list = []
-        for license in self.raw_license['license-information']['license']:
+        lic_list = []
+        dev_licences = self.raw_license['license-information']['license']
+        if type(dev_licences) is not list:
+            dev_licences = [dev_licences]
+
+        for licence in dev_licences:
             entry = {}
-            entry['lic_id'] = license['name']
+            entry['lic_id'] = licence['name']
             entry['name'] = []
 
             # If there is only one feature, it will not be in a list
-            feature = license['feature-block']['feature']
-            if type(feature) is not list:
-                feature = [feature]
+            if type(licence['feature-block']['feature']) is list:
+                features = licence['feature-block']['feature']
+            else:
+                features = [licence['feature-block']['feature']]
 
             # Get feature name and expiry
-            for feature in feature:
-                entry['name'].append(feature['name'])
+            for lic_feature in features:
+                # print(lic_feature)
+                entry['name'].append(lic_feature['name'])
                 entry['expiry'] = \
-                    feature['validity-information']['end-date']['#text']
+                    lic_feature['validity-information']['end-date']['#text']
 
-            list.append(entry)
+            lic_list.append(entry)
 
         # Return license information
-        licenses = {'licenses': list}
-        return licenses
+        licences = {'licenses': lic_list}
+        return licences
 
     def radius(self):
         """
@@ -419,11 +426,17 @@ class Device:
         for server in servers:
             entry = {}
             entry['server'] = server['name']
-            entry['facilities'] = server['contents'][0]['name']
 
-            # Extract the syslog level
-            syslog_levels = [key for key in server['contents'][0]]
-            entry['level'] = syslog_levels[1]
+            # Sometimes the 'contents' field will be a list
+            #   Othertimes it is a dictionary
+            if type(server['contents']) is list:
+                entry['facilities'] = server['contents'][0]['name']
+                syslog_levels = [key for key in server['contents'][0]]
+                entry['level'] = syslog_levels[1]
+            else:
+                entry['facilities'] = server['contents']['name']
+                syslog_levels = [key for key in server['contents']]
+                entry['level'] = syslog_levels
 
             if 'source-address' in server:
                 entry['source'] = server['source-address']
@@ -570,6 +583,10 @@ class Device:
                 ]
             }
         }
+
+        # Handle a case where there is no SNMP config at all
+        if 'snmp' not in self.config['configuration']:
+            return snmp
 
         # These may not be configured on all devices
         if 'name' in self.config['configuration']['snmp']:
