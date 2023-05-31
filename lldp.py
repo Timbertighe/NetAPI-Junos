@@ -180,13 +180,9 @@ class Lldp:
             Dictionary containing information
         """
 
-        print('DEBUG #1')
-
         my_dict = {
             "interfaces": []
         }
-
-        print(self.lldp_interface)
 
         lldp_ints = (
             self.lldp_interface
@@ -194,12 +190,8 @@ class Lldp:
             ['lldp-neighbor-information']
         )
 
-        print(lldp_ints)
-
         if type(lldp_ints) is not list:
             lldp_ints = [lldp_ints]
-
-        print('DEBUG #2')
 
         # Iterate through each interface
         for interface in lldp_ints:
