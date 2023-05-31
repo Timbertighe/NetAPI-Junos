@@ -130,20 +130,39 @@ class Ospf:
             user=self.user,
             password=self.password
         ) as connection:
-            self.config = connection.get_config(
-                filter=[
-                    'protocols/ospf',
-                ]
-            )
+            # If there was a failure to connect, return
+            if connection.dev is None:
+                return
+
+            # Collect OSPF information
             self.overview = connection.rpc_commands(
                 'get-ospf-overview-information'
             )
-            self.neighbour_info = connection.rpc_commands(
-                'get-ospf-neighbor-information'
-            )
-            self.interface_info = connection.rpc_commands(
-                'get-ospf-interface-information'
-            )
+
+            # Check if OSPF is running
+            if (
+                'output' in self.overview and
+                'not running' in self.overview['output']
+            ):
+                self.supported = False
+            else:
+                self.supported = True
+
+                # Get OSPF configuration
+                self.config = connection.get_config(
+                    filter=[
+                        'protocols/ospf',
+                    ]
+                )
+
+                # Get neighbour and interface information
+                self.neighbour_info = connection.rpc_commands(
+                    'get-ospf-neighbor-information'
+                )
+
+                self.interface_info = connection.rpc_commands(
+                    'get-ospf-interface-information'
+                )
 
         return self
 
@@ -192,6 +211,28 @@ class Ospf:
             Dictionary containing information
         """
 
+        if self.supported is False:
+            return {
+                "id": "",
+                "reference": ""
+            }
+
+        # Get reference bandwidth, if one is configured
+        if 'reference-bandwidth' in (
+            self.config['configuration']['protocols']['ospf']
+        ):
+            bw = (
+                self.config
+                ['configuration']
+                ['protocols']
+                ['ospf']
+                ['reference-bandwidth']
+            )
+
+        # If not configured, use default
+        else:
+            bw = '100mbps'
+
         # Build dictionary of information
         my_dict = {
             "id": (
@@ -200,13 +241,7 @@ class Ospf:
                 ['ospf-overview']
                 ['ospf-router-id']
             ),
-            "reference": (
-                self.config
-                ['configuration']
-                ['protocols']
-                ['ospf']
-                ['reference-bandwidth']
-            )
+            "reference": bw
         }
 
         return my_dict
@@ -228,6 +263,11 @@ class Ospf:
         my_dict : dict
             Dictionary containing information
         """
+
+        if self.supported is False:
+            return {
+                "areas": "",
+            }
 
         my_dict = {
             "areas": []
@@ -274,6 +314,11 @@ class Ospf:
             Dictionary containing information
         """
 
+        if self.supported is False:
+            return {
+                "neighbor": ""
+            }
+
         my_dict = {
             "neighbor": []
         }
@@ -284,6 +329,11 @@ class Ospf:
             ['ospf-neighbor-information']
             ['ospf-neighbor']
         )
+
+        # Make it a list if it isn't already
+        if type(neighbour_list) is not list:
+            neighbour_list = [neighbour_list]
+
         for neighbour in neighbour_list:
             entry = {}
             entry['address'] = neighbour['neighbor-address']
@@ -315,6 +365,9 @@ class Ospf:
         my_dict = {
             "interface": []
         }
+
+        if self.supported is False:
+            return my_dict
 
         int_list = (
             self.interface_info
