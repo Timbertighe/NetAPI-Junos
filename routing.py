@@ -116,6 +116,11 @@ class Routing:
             user=self.user,
             password=self.password
         ) as connection:
+            # If there was a failure to connect, return
+            if connection.dev is None:
+                return
+
+            # Collect routing table information
             self.routing = connection.rpc_commands(
                 'get-route-information'
             )
@@ -173,58 +178,86 @@ class Routing:
 
         # Only supports the IPv4 Unicast table for now
         ipv4_table = None
-        for table in self.routing['route-information']['route-table']:
+
+        # This may be a list or a dictionary
+        #   If it's a dictionary, convert it to a list
+        table_list = self.routing['route-information']['route-table']
+        if type(table_list) != list:
+            table_list = [table_list]
+
+        for table in table_list:
             if table['table-name'] == 'inet.0':
                 ipv4_table = table['rt']
                 break
 
         # Loop through the routes in the table
         for route in ipv4_table:
-            entry = {}
-            entry['protocol'] = route['rt-entry']['protocol-name']
 
-            # Don't worry about internal routes
-            if entry['protocol'] == 'Access-internal':
-                continue
+            destination = route['rt-destination']
 
-            # Get the destination
-            entry['route'] = route['rt-destination']
+            # Sometimes there is more than one entry (more than one protocol)
+            route_entry = route['rt-entry']
+            if type(route_entry) != list:
+                route_entry = [route_entry]
 
-            # Some types don't have a metric
-            if entry['protocol'] == 'Direct' or entry['protocol'] == 'Local':
-                entry['metric'] = 0
-            else:
-                entry['metric'] = route['rt-entry']['metric']
+            for specific_route in route_entry:
+                entry = {}
 
-            # Get a list of next hops
-            #   Some types don't have a next hop (eg, reject routes)
-            if 'nh' in route['rt-entry']:
-                entry['next_hop'] = []
-                next_hop = route['rt-entry']['nh']
-                if type(next_hop) is not list:
-                    next_hop = [next_hop]
+                entry['protocol'] = specific_route['protocol-name']
 
-                # Loop through the next hops
-                for hop in next_hop:
-                    hop_dict = {}
+                # Don't worry about internal routes
+                if entry['protocol'] == 'Access-internal':
+                    continue
 
-                    # Get the next-hop IP address
-                    #   Some types don't have an IP address
-                    if 'to' not in hop:
-                        hop_dict['hop'] = None
-                    else:
-                        hop_dict['hop'] = hop['to']
+                # Get the destination
+                entry['route'] = destination
 
-                    # Get the next-hop interface
-                    #   Some types don't have an interface
-                    if 'via' not in hop:
-                        hop_dict['interface'] = None
-                    else:
-                        hop_dict['interface'] = hop['via']
+                # Some types don't have a metric listed
+                if (
+                    entry['protocol'] == 'Direct' or
+                    entry['protocol'] == 'Local'
+                ):
+                    entry['metric'] = 0
 
-                    entry['next_hop'].append(hop_dict)
+                elif (
+                    entry['protocol'] == 'Static'
+                    and
+                    'metric' not in specific_route
+                ):
+                    entry['metric'] = 1
 
-            my_dict['entry'].append(entry)
+                else:
+                    entry['metric'] = specific_route['metric']
+
+                # Get a list of next hops
+                #   Some types don't have a next hop (eg, reject routes)
+                if 'nh' in specific_route:
+                    entry['next_hop'] = []
+                    next_hop = specific_route['nh']
+                    if type(next_hop) is not list:
+                        next_hop = [next_hop]
+
+                    # Loop through the next hops
+                    for hop in next_hop:
+                        hop_dict = {}
+
+                        # Get the next-hop IP address
+                        #   Some types don't have an IP address
+                        if 'to' not in hop:
+                            hop_dict['hop'] = None
+                        else:
+                            hop_dict['hop'] = hop['to']
+
+                        # Get the next-hop interface
+                        #   Some types don't have an interface
+                        if 'via' not in hop:
+                            hop_dict['interface'] = None
+                        else:
+                            hop_dict['interface'] = hop['via']
+
+                        entry['next_hop'].append(hop_dict)
+
+                my_dict['entry'].append(entry)
 
         return my_dict
 
